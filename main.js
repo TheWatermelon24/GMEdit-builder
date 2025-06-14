@@ -54,8 +54,10 @@ Builder = {
         let Runtimes = [];
         try {
             Electron_FS.readdirSync(path).forEach((e) => {
-                let rtStat = Electron_FS.statSync(path + e);
-                if (rtStat.isDirectory() && Electron_FS.existsSync(path + e + "/fnames")) {
+                let fullPath = path + e;
+                if (!Electron_FS.existsSync(fullPath)) return;
+                let rtStat = Electron_FS.statSync(fullPath);
+                if (rtStat.isDirectory() && Electron_FS.existsSync(fullPath + "/fnames")) {
                     Runtimes.push(e);
                 }
             });
@@ -293,9 +295,9 @@ Builder = {
             function projectOpened() {
                 for (let item of Builder.MenuItems.list) item.enabled = false;
                 let project = $gmedit["gml.Project"].current;
-                if (Builder.ProjectVersion(project) == 2) {
+                if (Builder.ProjectVersion(project) == 2 || Builder.ProjectVersion(project) == 1) {
                     Builder.MenuItems.run.enabled = true;
-                    Builder.MenuItems.runAndFork.enabled = true;
+                    Builder.MenuItems.runAndFork.enabled = Builder.ProjectVersion(project) == 2;
                     Builder.MenuItems.clean.enabled = true;
                     let runtime;
                     const pref = BuilderPreferences.current;
@@ -303,11 +305,11 @@ Builder = {
                         && pref.runtimeSettings.Stable.selection < "runtime-2.3"
                         && pref.runtimeSettings.Beta.selection != ""
                     ) {
-                        // if runtime is set to 2.2.5 but project uses 2.3, prefer a beta runtime
                         runtime = pref.runtimeSettings.Beta;
                     } else runtime = pref.runtimeSettings.Stable;
                     Builder.RuntimeSettings = runtime;
-                    Builder.LoadKeywords(runtime.location + runtime.selection);
+                    if (Builder.ProjectVersion(project) == 2)
+                        Builder.LoadKeywords(runtime.location + runtime.selection);
                 }
             }
             GMEdit.on("projectOpen", projectOpened);

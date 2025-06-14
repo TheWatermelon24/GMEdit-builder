@@ -23,7 +23,8 @@ class BuilderPreferences {
 				runtimeList: [],
 				selection: ""
 			}
-		}
+		},
+		freeGMAssetCompilerPath: (process.env.APPDATA || Electron_App.getPath("appData")) + "/GameMaker-Studio/FreeGMAssetCompiler.exe"
 	};
 	
 	static save() {
@@ -109,6 +110,10 @@ class BuilderPreferences {
 		}
 		
 		let settingsGroup = Preferences.addGroup(root, "Builder Settings");
+		Preferences.addInput(settingsGroup, "FreeGMAssetCompiler Path", this.current.freeGMAssetCompilerPath, (value) => {
+			this.current.freeGMAssetCompilerPath = value;
+			this.save();
+		});
 		if (Builder.Platform == "win") {
 			Preferences.addCheckbox(settingsGroup, 'Use virtual drives', this.current.useVirtualDrives, (value) => {
 				this.current.useVirtualDrives = value;

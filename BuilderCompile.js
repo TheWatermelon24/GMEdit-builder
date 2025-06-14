@@ -1,13 +1,12 @@
 class BuilderCompile {
     static run(autoRunFork) {
         let project = $gmedit["gml.Project"].current;
-        if (Builder.ProjectVersion(project) != 2) return false;
+        if (![1, 2].includes(Builder.ProjectVersion(project))) return false;
         BuilderCompile.runAsync(autoRunFork, project);
         return true;
     }
     static async runAsync(autoRunFork, project) {
         project ??= $gmedit["gml.Project"].current;
-        
         const path = require("path")
         const isWindows = (Builder.Platform == "win");
 
@@ -487,6 +486,93 @@ class BuilderCompile {
             return false;
         }
 
+        // Detect GMS1 project
+        const isGMS1 = Builder.ProjectVersion(project) == 1;
+        if (isGMS1) {
+            // GMS1 build logic
+            let output = BuilderOutput.open(false);
+            output.clear(`Compile Started: ${Builder.GetTime()}`);
+            let exePath = BuilderPreferences.current.freeGMAssetCompilerPath;
+            if (!exePath || !Electron_FS.existsSync(exePath)) {
+                output.write("FreeGMAssetCompiler.exe not found! Set the path in Builder Preferences.");
+                return;
+            }
+            let Name = project.name.replace(/\.[^.]+$/, "");
+            Builder.Name = Builder.Sanitize(Name);
+            let Temporary = path.join(process.env.LOCALAPPDATA, "GameMaker-Studio", "build");
+            let Cache = path.join(process.env.LOCALAPPDATA, "GameMaker-Studio", "cache");
+            let OutDir = path.join(Temporary, Builder.Name + "_out");
+            let GMXPath = project.path;
+            let params = [
+                "/c",
+                "/m=win",
+                '/config="Default"',
+                "/tgt=64",
+                "/obob=True",
+                "/obpp=False",
+                "/obru=True",
+                "/obes=False",
+                "/i=3",
+                "/j=2",
+                "/cvm",
+                "/tp=2048",
+                "/mv=1",
+                "/iv=0",
+                "/rv=0",
+                "/bv=9999",
+                `/gn="${Builder.Name}"`,
+                `/td="${Temporary}"`,
+                `/cd="${Cache}"`,
+                "/sh=True",
+                '/dbgp="6502"',
+                '/hip="127.0.0.1"',
+                '/hprt="51268"',
+                `/o="${OutDir}"`,
+                `"${GMXPath}"`
+            ];
+            output.write(`Running: "${exePath}" ${params.join(" ")}`);
+            Builder.Compiler = Builder.Command.spawn(exePath, params, { cwd: path.dirname(exePath) });
+            Builder.Compiler.stdout.on("data", (e) => output.write(e.toString(), false));
+            Builder.Compiler.stderr.on("data", (e) => output.write(e.toString(), false));
+            Builder.Compiler.on("close", (exitCode) => {
+                output.write(`Compile Ended: ${Builder.GetTime()} (exit code ${exitCode})`);
+                Builder.Compiler = undefined;
+                Builder.CleanRuntime();
+
+                // --- Run the built game if compilation succeeded ---
+                if (exitCode === 0) {
+                    // Find the built .win file and launch with Runner.exe using "-game OutDir"
+                    let baseName = Builder.Name.replace(/\.[^.]+$/, "");
+                    let winName = baseName + ".win";
+                    let winPath = path.join(OutDir, winName);
+
+                    // Try to find Runner.exe in the same directory as FreeGMAssetCompiler, or let user configure it
+                    let runnerExe = path.join(path.dirname(exePath), "Runner.exe");
+                    if (!Electron_FS.existsSync(runnerExe)) {
+                        // Try default GameMaker Studio 1.4 runner location
+                        runnerExe = "%appdata%\\GameMaker-Studio\\Runner.exe";
+                    }
+                    if (!Electron_FS.existsSync(runnerExe)) {
+                        output.write(`Could not find Runner.exe to launch the game. Looked in:\n${path.dirname(exePath)}\nand\nC:/ProgramData/GameMakerStudio/`);
+                        return;
+                    }
+                    if (Electron_FS.existsSync(winPath)) {
+                        output.write(`Launching: "${runnerExe}" -game "${winPath}"`);
+                        let runner = Builder.Command.spawn(runnerExe, ["-game", winPath], { cwd: OutDir });
+                        Builder.Runner.push(runner);
+                        runner.stdout.on("data", (e) => output.write(e.toString(), false));
+                        runner.stderr.on("data", (e) => output.write(e.toString(), false));
+                        runner.on("close", (code) => {
+                            output.write(`Game exited with code ${code}`);
+                            Builder.CleanRuntime();
+                        });
+                    } else {
+                        output.write(`Could not find built .win file: ${winPath}`);
+                    }
+                }
+            });
+            return;
+        }
         // Run the compiler!
         let compileStartTime = Date.now();
         if (await runUserCommandStep("pre_build_step")) return;
