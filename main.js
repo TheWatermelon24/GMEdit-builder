@@ -6,6 +6,10 @@ Builder = {
     Platform: require("os").type(),
     RuntimeSettings: null,
     LoadKeywords: function(path) {
+        if (!Electron_FS.existsSync(path)) {
+            console.warn(`LoadKeywords: Directory does not exist: ${path}`);
+            return;
+        }
         const custBase = $gmedit["electron.FileWrap"].userPath + "/api/" + GmlAPI.version.getName();
         const GmlAPILoader = $gmedit["gml.GmlAPILoader"];
         const GmlParseAPI = $gmedit["parsers.GmlParseAPI"];
@@ -52,6 +56,10 @@ Builder = {
     },
     GetRuntimes: function(path) {
         let Runtimes = [];
+        if (!Electron_FS.existsSync(path)) {
+            console.warn(`GetRuntimes: Directory does not exist: ${path}`);
+            return Runtimes;
+        }
         try {
             Electron_FS.readdirSync(path).forEach((e) => {
                 let fullPath = path + e;
@@ -95,15 +103,16 @@ Builder = {
             });
             return false;
         }
-        
+
         // Load preferences file
         BuilderPreferences.init();
         for (let [key, val] of Object.entries(BuilderPreferences.current.runtimeSettings)) {
             this.InitalizeRuntimes(val, key == "Stable");
         }
-        
-        let runtimeSettings = BuilderPreferences.current.runtimeSettings.Stable;
-        Builder.LoadKeywords(runtimeSettings.location + runtimeSettings.selection);
+
+        // Do NOT load keywords here; wait until project is opened and type is known
+        // let runtimeSettings = BuilderPreferences.current.runtimeSettings.Stable;
+        // Builder.LoadKeywords(runtimeSettings.location + runtimeSettings.selection);
         return true;
     }
 };
@@ -308,6 +317,7 @@ Builder = {
                         runtime = pref.runtimeSettings.Beta;
                     } else runtime = pref.runtimeSettings.Stable;
                     Builder.RuntimeSettings = runtime;
+                    // Only load keywords for GMS2 projects
                     if (Builder.ProjectVersion(project) == 2)
                         Builder.LoadKeywords(runtime.location + runtime.selection);
                 }
